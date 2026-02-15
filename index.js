@@ -8,16 +8,23 @@ const initialTasks = [
   "Watch something for fun",
 ];
 
-// Load tasks from localStorage
-// If nothing is saved yet, return the default list
+// Key for localStorage
+const STORAGE_KEY = 'todoData';
+
+// Load tasks from localStorage safely
 function loadTodoItems() {
-  const saved = localStorage.getItem('todoData');
-  return saved ? JSON.parse(saved) : initialTasks;
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved) : initialTasks;
+  } catch (error) {
+    // If localStorage data is broken, fallback to defaults
+    return initialTasks;
+  }
 }
 
-// Save current tasks to localStorage
+// Save tasks to localStorage
 function saveTodoItems(taskList) {
-  localStorage.setItem('todoData', JSON.stringify(taskList));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(taskList));
 }
 
 // Collect all task texts currently displayed in the DOM
@@ -26,16 +33,33 @@ function getRenderedTasks() {
   return Array.from(textElements).map(el => el.textContent);
 }
 
+// Empty state message element
+const emptyMessage = document.createElement('p');
+emptyMessage.textContent = 'No tasks yet';
+emptyMessage.style.textAlign = 'center';
+emptyMessage.style.color = '#777';
+emptyMessage.style.marginTop = '40px';
+
+// Show or hide empty state message
+function toggleEmptyState() {
+  const tasks = getRenderedTasks();
+  if (tasks.length === 0) {
+    if (!todoList.contains(emptyMessage)) {
+      todoList.after(emptyMessage);
+    }
+  } else {
+    emptyMessage.remove();
+  }
+}
+
 // Create a new todo item from the template
 function createTodoElement(text) {
   const template = document.querySelector('#to-do__item-template');
   const node = template.content.cloneNode(true);
 
-  // Set task text
   const textNode = node.querySelector('.to-do__item-text');
   textNode.textContent = text;
 
-  // Buttons
   const deleteBtn = node.querySelector('.to-do__item-button_type_delete');
   const duplicateBtn = node.querySelector('.to-do__item-button_type_duplicate');
   const editBtn = node.querySelector('.to-do__item-button_type_edit');
@@ -44,6 +68,7 @@ function createTodoElement(text) {
   deleteBtn.addEventListener('click', (e) => {
     e.target.closest('.to-do__item').remove();
     saveTodoItems(getRenderedTasks());
+    toggleEmptyState();
   });
 
   // Duplicate task
@@ -51,6 +76,7 @@ function createTodoElement(text) {
     const duplicated = createTodoElement(textNode.textContent);
     todoList.prepend(duplicated);
     saveTodoItems(getRenderedTasks());
+    toggleEmptyState();
   });
 
   // Enable editing mode
@@ -59,13 +85,20 @@ function createTodoElement(text) {
     textNode.focus();
   });
 
-  // Disable editing mode and save on blur
+  // Disable editing mode and save only if text changed
   textNode.addEventListener('blur', () => {
     textNode.contentEditable = 'false';
-    saveTodoItems(getRenderedTasks());
+
+    const updatedTasks = getRenderedTasks();
+    const savedTasks = loadTodoItems();
+
+    // Save only if something actually changed
+    if (JSON.stringify(updatedTasks) !== JSON.stringify(savedTasks)) {
+      saveTodoItems(updatedTasks);
+    }
   });
 
-  // Save edit when Enter is pressed
+  // Finish editing on Enter
   textNode.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -81,24 +114,26 @@ const todoList = document.querySelector('.to-do__list');
 const todoForm = document.querySelector('.to-do__form');
 const todoInput = document.querySelector('.to-do__input');
 
-// Render tasks on page load
+// Initial render
 loadTodoItems().forEach(task => {
   todoList.append(createTodoElement(task));
 });
+
+// Show empty state if needed on load
+toggleEmptyState();
 
 // Handle new task submission
 todoForm.addEventListener('submit', (e) => {
   e.preventDefault();
 
   const value = todoInput.value.trim();
-  if (!value) return;
 
-  // Add new task to the top of the list
+  // Prevent adding empty or space-only tasks
+  if (!value.length) return;
+
   todoList.prepend(createTodoElement(value));
-
-  // Save updated list
   saveTodoItems(getRenderedTasks());
+  toggleEmptyState();
 
-  // Clear input field
   todoInput.value = '';
 });
